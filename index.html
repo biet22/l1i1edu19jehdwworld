@@ -15,10 +15,11 @@
     --text-main: #262626;
     --text-sub: #8e8e8e;
     --border: #efefef;
+    --btn-border: #d9d9d9; /* 按钮边框色 */
     --btn-black: #262626;
     --btn-text: #ffffff;
-    --btn-hover: #4a4a4a;
-    --highlight-bg: #f0f0f0; /* 搜索高亮背景色 */
+    --highlight-bg: #f7f7f7;
+    --select-bg: #e0e0e0;
   }
 
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -67,12 +68,11 @@
     color: var(--btn-text);
   }
 
-  /* 搜索区域样式 (新增) */
-  .search-wrapper {
+  /* 工具栏区域 */
+  .toolbar-wrapper {
     max-width: 600px;
     margin: 0 auto 20px auto;
-    position: relative;
-    display: none; /* 默认隐藏，加载数据后显示 */
+    display: none;
   }
 
   .search-box {
@@ -80,6 +80,7 @@
     position: relative;
     display: flex;
     align-items: center;
+    margin-bottom: 12px;
   }
 
   .search-icon {
@@ -108,6 +109,40 @@
     border-color: var(--text-sub);
   }
 
+  /* 多选操作栏 */
+  .selection-controls {
+    display: flex;
+    gap: 10px; /* 按钮间距 */
+    justify-content: space-between;
+  }
+  
+  /* 统一按钮样式：白底黑字带边框 */
+  .ctrl-btn {
+    flex: 1; /* 平分宽度，确保大小一致 */
+    padding: 10px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    background: #fff;
+    border: 1px solid var(--btn-border);
+    border-radius: 4px;
+    color: var(--text-main);
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s;
+  }
+  
+  .ctrl-btn:active { 
+    background: #f5f5f5; 
+    border-color: var(--text-main);
+  }
+
+  /* 下载按钮默认隐藏 */
+  #downloadSelectedBtn {
+    display: none;
+    /* 稍微加深边框以示区别，但保持风格统一 */
+    border-color: #999;
+  }
+
   #status-log {
     font-size: 0.8rem;
     color: var(--text-sub);
@@ -120,7 +155,7 @@
   #entries {
     max-width: 600px;
     margin: 0 auto;
-    padding-bottom: 40px;
+    padding-bottom: 80px;
   }
 
   .entry {
@@ -131,25 +166,42 @@
   }
   .entry:first-child { border-top: 1px solid var(--border); }
 
-  /* 搜索高亮样式 (新增) */
+  /* 状态样式 */
   .entry.highlight {
-    background-color: var(--highlight-bg); /* 加深背景 */
-    border-left: 4px solid var(--text-main); /* 左侧加粗提示 */
+    border-left: 4px solid var(--text-main);
+    background-color: var(--highlight-bg);
   }
   
-  .entry.highlight .entry-title {
-    font-weight: 600; /* 标题加粗 */
+  .entry.selected {
+    background-color: var(--select-bg) !important;
   }
 
   .entry-header {
     padding: 16px 12px;
     display: flex;
-    justify-content: space-between;
     align-items: center;
     cursor: pointer;
     user-select: none;
   }
   .entry-header:active { background-color: #eaeaea; }
+
+  /* 复选框样式 */
+  .checkbox-custom {
+    display: none;
+    width: 20px;
+    height: 20px;
+    margin-right: 12px;
+    cursor: pointer;
+    accent-color: var(--text-main);
+  }
+
+  .selection-mode .checkbox-custom {
+    display: block;
+  }
+  
+  .selection-mode .export-btn {
+    display: none;
+  }
 
   .entry-title {
     font-weight: 500;
@@ -161,6 +213,8 @@
     flex: 1;
   }
 
+  .entry.highlight .entry-title { font-weight: 600; }
+
   .export-btn {
     padding: 6px 12px;
     font-size: 0.8rem;
@@ -171,12 +225,7 @@
     cursor: pointer;
     flex-shrink: 0;
   }
-  .export-btn:active {
-    background: var(--text-main);
-    color: white;
-    border-color: var(--text-main);
-  }
-
+  
   .entry-content {
     display: none;
     padding: 0 12px 20px 12px;
@@ -188,10 +237,8 @@
     border-top: 1px dashed #eee;
   }
 
-  /* 展开状态 */
   .entry.expanded .entry-content { display: block; animation: fadeIn 0.3s ease; }
-  .entry.expanded .entry-header { font-weight: 600; }
-
+  
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(-5px); }
     to { opacity: 1; transform: translateY(0); }
@@ -236,21 +283,9 @@
     border: none;
     width: 100%;
   }
-  .btn-primary {
-    background: var(--btn-black);
-    color: white;
-  }
-  .btn-secondary {
-    background: #f0f0f0;
-    color: var(--text-main);
-  }
-  .btn-close {
-    margin-top: 10px;
-    background: transparent;
-    color: var(--text-sub);
-    font-size: 0.85rem;
-    padding: 8px;
-  }
+  .btn-primary { background: var(--btn-black); color: white; }
+  .btn-secondary { background: #f0f0f0; color: var(--text-main); }
+  .btn-close { margin-top: 10px; background: transparent; color: var(--text-sub); font-size: 0.85rem; padding: 8px; }
 
 </style>
 </head>
@@ -265,14 +300,20 @@
   <input type="file" id="jsonFile" accept=".json" />
 </div>
 
-<!-- 搜索栏 (新增) -->
-<div class="search-wrapper" id="searchWrapper">
+<!-- 工具栏 -->
+<div class="toolbar-wrapper" id="toolbarWrapper">
+  <!-- 搜索栏 -->
   <div class="search-box">
-    <!-- 放大镜 SVG 图标 -->
     <svg class="search-icon" viewBox="0 0 24 24">
       <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
     </svg>
     <input type="text" id="searchInput" placeholder="搜索条目..." autocomplete="off">
+  </div>
+  
+  <!-- 多选控制按钮 (平分宽度，统一样式) -->
+  <div class="selection-controls">
+    <button id="toggleSelectBtn" class="ctrl-btn">多选</button>
+    <button id="downloadSelectedBtn" class="ctrl-btn">下载选中</button>
   </div>
 </div>
 
@@ -284,6 +325,7 @@
   <div class="modal-box">
     <div class="modal-title" id="modalTitle">检测到 Worldbook</div>
     <div class="modal-actions">
+      <!-- 修改文案：去掉了 (全部) -->
       <button class="modal-btn btn-primary" id="btnZip">打包下载 ZIP</button>
       <button class="modal-btn btn-secondary" id="btnList">查看条目列表</button>
       <button class="modal-btn btn-close" id="btnClose">取消</button>
@@ -292,10 +334,13 @@
 </div>
 
 <script>
-// --- 全局变量暂存数据 ---
+// --- 全局变量 ---
 let currentWorldbookData = null;
 let currentBookName = '';
-let globalItemList = []; // 存储当前加载的所有条目，用于搜索过滤
+let globalItemList = []; // 所有条目
+let currentDisplayList = []; // 当前筛选后显示的条目
+let isSelectionMode = false;
+let selectedIndices = new Set(); // 存储被选中的 item._originalIndex
 
 // --- 工具函数 ---
 function sanitizeFilename(name) {
@@ -327,15 +372,24 @@ const closeModal = () => {
 };
 document.getElementById('btnClose').addEventListener('click', closeModal);
 
+// --- 重置状态 ---
+function resetState() {
+  document.getElementById('entries').innerHTML = ''; 
+  document.getElementById('toolbarWrapper').style.display = 'none';
+  document.getElementById('searchInput').value = '';
+  
+  isSelectionMode = false;
+  selectedIndices.clear();
+  updateSelectionUI();
+}
+
 // --- 主逻辑：文件上传 ---
 document.getElementById('jsonFile').addEventListener('change', async function(e) {
   const file = e.target.files[0];
   if (!file) return;
 
   log('正在读取...');
-  document.getElementById('entries').innerHTML = ''; 
-  document.getElementById('searchWrapper').style.display = 'none'; // 重新加载时先隐藏搜索框
-  document.getElementById('searchInput').value = ''; // 清空搜索词
+  resetState();
   
   const text = await file.text();
   let data;
@@ -359,14 +413,22 @@ document.getElementById('jsonFile').addEventListener('change', async function(e)
     return;
   }
 
-  // 2. Preset 检测 (直接渲染)
+  // 2. Preset 检测
   const presetEntries = data.presets?.[0]?.prompts || data.prompts || [];
   if (Array.isArray(presetEntries) && presetEntries.length > 0) {
+    currentBookName = data.presets?.[0]?.name || file.name.replace(/\.json$/i, '');
+    currentBookName = sanitizeFilename(currentBookName);
+
     log(`加载预设条目: ${presetEntries.length}个`);
-    // 保存到全局变量，并增加原始索引以保持排序稳定
-    globalItemList = presetEntries.map((item, index) => ({...item, _originalIndex: index}));
-    renderList(globalItemList);
-    document.getElementById('searchWrapper').style.display = 'block'; // 显示搜索框
+    globalItemList = presetEntries.map((item, index) => ({
+      name: item.name || item.title || item.comment || `Preset_${index}`,
+      content: item.content || '',
+      _originalIndex: index
+    }));
+    
+    currentDisplayList = [...globalItemList];
+    renderList(currentDisplayList);
+    document.getElementById('toolbarWrapper').style.display = 'block';
     return;
   }
 
@@ -374,33 +436,29 @@ document.getElementById('jsonFile').addEventListener('change', async function(e)
   alert('未找到有效的 entries 或 prompts');
 });
 
-// --- 搜索功能逻辑 (新增) ---
+// --- 搜索功能 ---
 document.getElementById('searchInput').addEventListener('input', function(e) {
   const keyword = e.target.value.toLowerCase().trim();
 
   if (!globalItemList || globalItemList.length === 0) return;
 
   if (!keyword) {
-    // 如果没有关键字，清除高亮并按原始顺序显示
     const resetList = globalItemList.map(item => ({ ...item, _highlight: false }));
-    renderList(resetList);
+    currentDisplayList = resetList;
+    renderList(currentDisplayList);
     return;
   }
 
-  // 分离匹配项和非匹配项
   const matched = [];
   const others = [];
 
   globalItemList.forEach(item => {
-    // 简单的搜索匹配：标题 或 内容 包含关键字
-    const title = (item.name || item.comment || item.title || '').toLowerCase();
+    const title = (item.name || '').toLowerCase();
     const content = (item.content || '').toLowerCase();
-    
-    // 创建显示用的副本，以免修改原始数据
     const displayItem = { ...item };
 
     if (title.includes(keyword) || content.includes(keyword)) {
-      displayItem._highlight = true; // 标记为高亮
+      displayItem._highlight = true;
       matched.push(displayItem);
     } else {
       displayItem._highlight = false;
@@ -408,17 +466,83 @@ document.getElementById('searchInput').addEventListener('input', function(e) {
     }
   });
 
-  // 拼接：匹配项在前，其他在后
-  const sortedList = [...matched, ...others];
-  
-  // 渲染
-  renderList(sortedList);
+  currentDisplayList = [...matched, ...others];
+  renderList(currentDisplayList);
 });
 
+// --- 多选功能逻辑 ---
 
-// --- 模态框按钮事件 ---
+const toggleBtn = document.getElementById('toggleSelectBtn');
+const downloadSelectedBtn = document.getElementById('downloadSelectedBtn');
+const entriesContainer = document.getElementById('entries');
 
-// 选项 A: 直接打包下载 ZIP
+toggleBtn.addEventListener('click', () => {
+  isSelectionMode = !isSelectionMode;
+  updateSelectionUI();
+  renderList(currentDisplayList); 
+});
+
+function updateSelectionUI() {
+  if (isSelectionMode) {
+    toggleBtn.textContent = '退出多选';
+    downloadSelectedBtn.style.display = 'block';
+    entriesContainer.classList.add('selection-mode');
+  } else {
+    toggleBtn.textContent = '多选';
+    downloadSelectedBtn.style.display = 'none';
+    entriesContainer.classList.remove('selection-mode');
+    
+    selectedIndices.clear();
+    updateDownloadBtn();
+  }
+}
+
+function updateDownloadBtn() {
+  const count = selectedIndices.size;
+  downloadSelectedBtn.textContent = `下载选中 (${count})`;
+}
+
+// 下载选中项
+downloadSelectedBtn.addEventListener('click', async () => {
+  if (selectedIndices.size === 0) {
+    alert('请至少选择一个条目');
+    return;
+  }
+
+  log('正在打包选中项...');
+  const zip = new JSZip();
+  let count = 0;
+
+  globalItemList.forEach(item => {
+    if (selectedIndices.has(item._originalIndex)) {
+      const content = (item.content || '').trim();
+      const filename = sanitizeFilename(item.name);
+      let finalName = filename + '.txt';
+      if (zip.file(finalName)) {
+        finalName = `${filename}_${item._originalIndex}.txt`;
+      }
+      
+      zip.file(finalName, content);
+      count++;
+    }
+  });
+
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${currentBookName}.zip`; 
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+
+  log(`已下载选中项 (${count}条)`);
+});
+
+// --- Worldbook 操作 ---
+
+// A: 全部下载
 document.getElementById('btnZip').addEventListener('click', async () => {
   modal.style.display = 'none';
   log('正在打包 ZIP...');
@@ -438,9 +562,7 @@ document.getElementById('btnZip').addEventListener('click', async () => {
   }
 
   if (count === 0) {
-    alert('没有有效内容可导出');
-    log('无内容');
-    return;
+    alert('没有有效内容可导出'); return;
   }
 
   const blob = await zip.generateAsync({ type: 'blob' });
@@ -456,7 +578,7 @@ document.getElementById('btnZip').addEventListener('click', async () => {
   log(`已下载 ZIP (${count}条)`);
 });
 
-// 选项 B: 查看条目列表
+// B: 查看列表
 document.getElementById('btnList').addEventListener('click', () => {
   modal.style.display = 'none';
   log('正在渲染列表...');
@@ -468,21 +590,22 @@ document.getElementById('btnList').addEventListener('click', () => {
   for (const key in entriesObj) {
     const entry = entriesObj[key];
     const content = (entry.content ?? '').trim();
-    if (!content) continue;
+    if (!content) continue; 
 
     const title = entry.comment || entry.title || entry.name || `entry_${key}`;
     
     listData.push({
       name: title,
       content: content,
-      _originalIndex: idx++ // 记录原始顺序
+      _originalIndex: idx++ 
     });
   }
 
-  globalItemList = listData; // 保存到全局供搜索使用
-  log(`已列出 Worldbook 条目: ${listData.length}个`);
-  renderList(listData);
-  document.getElementById('searchWrapper').style.display = 'block'; // 显示搜索框
+  globalItemList = listData;
+  currentDisplayList = [...globalItemList];
+  
+  renderList(currentDisplayList);
+  document.getElementById('toolbarWrapper').style.display = 'block'; 
 });
 
 
@@ -498,18 +621,45 @@ function renderList(items) {
 
   items.forEach(item => {
     const div = document.createElement('div');
-    // 如果是搜索匹配项，添加 highlight 类
-    div.className = item._highlight ? 'entry highlight' : 'entry';
+    let className = 'entry';
+    if (item._highlight) className += ' highlight';
+    if (isSelectionMode && selectedIndices.has(item._originalIndex)) className += ' selected';
+    
+    div.className = className;
 
     // Header
     const header = document.createElement('div');
     header.className = 'entry-header';
 
+    // 1. 复选框
+    if (isSelectionMode) {
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'checkbox-custom';
+      checkbox.checked = selectedIndices.has(item._originalIndex);
+      
+      checkbox.addEventListener('click', (e) => {
+        e.stopPropagation(); 
+        if (checkbox.checked) {
+          selectedIndices.add(item._originalIndex);
+          div.classList.add('selected');
+        } else {
+          selectedIndices.delete(item._originalIndex);
+          div.classList.remove('selected');
+        }
+        updateDownloadBtn();
+      });
+      
+      header.appendChild(checkbox);
+    }
+
+    // 2. 标题
     const title = document.createElement('div');
     title.className = 'entry-title';
     title.textContent = item.name || 'Unnamed';
+    header.appendChild(title);
     
-    // 导出按钮
+    // 3. 导出按钮
     const exportBtn = document.createElement('button');
     exportBtn.className = 'export-btn';
     exportBtn.textContent = '导出';
@@ -517,8 +667,6 @@ function renderList(items) {
       e.stopPropagation(); 
       exportToTxt(item.name, item.content || '');
     });
-
-    header.appendChild(title);
     header.appendChild(exportBtn);
 
     // Content
@@ -526,8 +674,8 @@ function renderList(items) {
     contentDiv.className = 'entry-content';
     contentDiv.textContent = item.content || '';
 
-    // Click to Expand
-    header.addEventListener('click', () => {
+    // Header 展开事件
+    header.addEventListener('click', (e) => {
       div.classList.toggle('expanded');
     });
 

@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Toolbox: Preset & Worldbook</title>
+<!-- 引入 JSZip 和 JSON5 库 -->
+<script src="https://cdn.jsdelivr.net/npm/json5@2/dist/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3/dist/jszip.min.js"></script>
+
+<style>
+  :root {
+    --bg-color: #fafafa;
+    --card-bg: #ffffff;
+    --text-main: #262626;
+    --text-sub: #8e8e8e;
+    --border: #efefef;
+    --btn-black: #262626;
+    --btn-text: #ffffff;
+    --btn-hover: #4a4a4a;
+    --highlight-bg: #f0f0f0; /* 搜索高亮背景色 */
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    margin: 0;
+    padding: 20px 16px;
+    line-height: 1.5;
+  }
+
+  h1 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 24px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-main);
+  }
+
+  /* 上传区域 */
+  .upload-container {
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  input[type="file"] { display: none; }
+
+  .custom-file-upload {
+    display: inline-block;
+    padding: 10px 20px;
+    border: 1px solid var(--text-main);
+    border-radius: 4px;
+    cursor: pointer;
+    background: transparent;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+  }
+
+  .custom-file-upload:active {
+    background: var(--text-main);
+    color: var(--btn-text);
+  }
+
+  /* 搜索区域样式 (新增) */
+  .search-wrapper {
+    max-width: 600px;
+    margin: 0 auto 20px auto;
+    position: relative;
+    display: none; /* 默认隐藏，加载数据后显示 */
+  }
+
+  .search-box {
+    width: 100%;
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 12px;
+    width: 16px;
+    height: 16px;
+    fill: var(--text-sub);
+    pointer-events: none;
+  }
+
+  #searchInput {
+    width: 100%;
+    padding: 10px 10px 10px 36px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--card-bg);
+    color: var(--text-main);
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+    -webkit-appearance: none;
+  }
+
+  #searchInput:focus {
+    border-color: var(--text-sub);
+  }
+
+  #status-log {
+    font-size: 0.8rem;
+    color: var(--text-sub);
+    text-align: center;
+    margin-bottom: 24px;
+    min-height: 1.2rem;
+  }
+
+  /* 列表区域 */
+  #entries {
+    max-width: 600px;
+    margin: 0 auto;
+    padding-bottom: 40px;
+  }
+
+  .entry {
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
+    transition: background 0.2s, border 0.2s;
+    position: relative;
+  }
+  .entry:first-child { border-top: 1px solid var(--border); }
+
+  /* 搜索高亮样式 (新增) */
+  .entry.highlight {
+    background-color: var(--highlight-bg); /* 加深背景 */
+    border-left: 4px solid var(--text-main); /* 左侧加粗提示 */
+  }
+  
+  .entry.highlight .entry-title {
+    font-weight: 600; /* 标题加粗 */
+  }
+
+  .entry-header {
+    padding: 16px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+  }
+  .entry-header:active { background-color: #eaeaea; }
+
+  .entry-title {
+    font-weight: 500;
+    font-size: 0.95rem;
+    margin-right: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+
+  .export-btn {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    background: white;
+    color: var(--text-main);
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .export-btn:active {
+    background: var(--text-main);
+    color: white;
+    border-color: var(--text-main);
+  }
+
+  .entry-content {
+    display: none;
+    padding: 0 12px 20px 12px;
+    font-size: 0.9rem;
+    color: #555;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.6;
+    border-top: 1px dashed #eee;
+  }
+
+  /* 展开状态 */
+  .entry.expanded .entry-content { display: block; animation: fadeIn 0.3s ease; }
+  .entry.expanded .entry-header { font-weight: 600; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* 模态框 (Modal) 样式 */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(2px);
+    z-index: 100;
+    justify-content: center;
+    align-items: center;
+  }
+  .modal-box {
+    background: white;
+    padding: 24px;
+    border-radius: 8px;
+    width: 85%;
+    max-width: 320px;
+    text-align: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+  .modal-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 20px;
+    color: var(--text-main);
+  }
+  .modal-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .modal-btn {
+    padding: 12px;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    border: none;
+    width: 100%;
+  }
+  .btn-primary {
+    background: var(--btn-black);
+    color: white;
+  }
+  .btn-secondary {
+    background: #f0f0f0;
+    color: var(--text-main);
+  }
+  .btn-close {
+    margin-top: 10px;
+    background: transparent;
+    color: var(--text-sub);
+    font-size: 0.85rem;
+    padding: 8px;
+  }
+
+</style>
+</head>
+<body>
+
+<h1>Text Exporter</h1>
+
+<div class="upload-container">
+  <label for="jsonFile" class="custom-file-upload">
+    OPEN JSON
+  </label>
+  <input type="file" id="jsonFile" accept=".json" />
+</div>
+
+<!-- 搜索栏 (新增) -->
+<div class="search-wrapper" id="searchWrapper">
+  <div class="search-box">
+    <!-- 放大镜 SVG 图标 -->
+    <svg class="search-icon" viewBox="0 0 24 24">
+      <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+    </svg>
+    <input type="text" id="searchInput" placeholder="搜索条目..." autocomplete="off">
+  </div>
+</div>
+
+<div id="status-log">等待导入...</div>
+<div id="entries"></div>
+
+<!-- 模态框：Worldbook 操作选择 -->
+<div id="choiceModal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-title" id="modalTitle">检测到 Worldbook</div>
+    <div class="modal-actions">
+      <button class="modal-btn btn-primary" id="btnZip">打包下载 ZIP</button>
+      <button class="modal-btn btn-secondary" id="btnList">查看条目列表</button>
+      <button class="modal-btn btn-close" id="btnClose">取消</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// --- 全局变量暂存数据 ---
+let currentWorldbookData = null;
+let currentBookName = '';
+let globalItemList = []; // 存储当前加载的所有条目，用于搜索过滤
+
+// --- 工具函数 ---
+function sanitizeFilename(name) {
+  return (name || 'unnamed').replace(/[\\/:*?"<>|]/g, '_');
+}
+
+function log(msg) {
+  document.getElementById('status-log').textContent = msg;
+}
+
+// 导出单个文本
+function exportToTxt(name, content) {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = sanitizeFilename(name) + '.txt';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// 模态框控制
+const modal = document.getElementById('choiceModal');
+const closeModal = () => { 
+  modal.style.display = 'none'; 
+  document.getElementById('jsonFile').value = ''; 
+};
+document.getElementById('btnClose').addEventListener('click', closeModal);
+
+// --- 主逻辑：文件上传 ---
+document.getElementById('jsonFile').addEventListener('change', async function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  log('正在读取...');
+  document.getElementById('entries').innerHTML = ''; 
+  document.getElementById('searchWrapper').style.display = 'none'; // 重新加载时先隐藏搜索框
+  document.getElementById('searchInput').value = ''; // 清空搜索词
+  
+  const text = await file.text();
+  let data;
+  try {
+    data = JSON5.parse(text);
+  } catch (err) {
+    alert('JSON 解析失败');
+    log('解析错误');
+    return;
+  }
+
+  // 1. Worldbook 检测
+  if (data.entries && typeof data.entries === 'object' && !Array.isArray(data.entries)) {
+    currentWorldbookData = data;
+    currentBookName = data.book?.name || data.name || file.name.replace(/\.json$/i, '');
+    currentBookName = sanitizeFilename(currentBookName);
+    
+    document.getElementById('modalTitle').textContent = `检测到: ${currentBookName}`;
+    modal.style.display = 'flex'; 
+    log('等待选择操作...');
+    return;
+  }
+
+  // 2. Preset 检测 (直接渲染)
+  const presetEntries = data.presets?.[0]?.prompts || data.prompts || [];
+  if (Array.isArray(presetEntries) && presetEntries.length > 0) {
+    log(`加载预设条目: ${presetEntries.length}个`);
+    // 保存到全局变量，并增加原始索引以保持排序稳定
+    globalItemList = presetEntries.map((item, index) => ({...item, _originalIndex: index}));
+    renderList(globalItemList);
+    document.getElementById('searchWrapper').style.display = 'block'; // 显示搜索框
+    return;
+  }
+
+  log('无法识别的文件格式');
+  alert('未找到有效的 entries 或 prompts');
+});
+
+// --- 搜索功能逻辑 (新增) ---
+document.getElementById('searchInput').addEventListener('input', function(e) {
+  const keyword = e.target.value.toLowerCase().trim();
+
+  if (!globalItemList || globalItemList.length === 0) return;
+
+  if (!keyword) {
+    // 如果没有关键字，清除高亮并按原始顺序显示
+    const resetList = globalItemList.map(item => ({ ...item, _highlight: false }));
+    renderList(resetList);
+    return;
+  }
+
+  // 分离匹配项和非匹配项
+  const matched = [];
+  const others = [];
+
+  globalItemList.forEach(item => {
+    // 简单的搜索匹配：标题 或 内容 包含关键字
+    const title = (item.name || item.comment || item.title || '').toLowerCase();
+    const content = (item.content || '').toLowerCase();
+    
+    // 创建显示用的副本，以免修改原始数据
+    const displayItem = { ...item };
+
+    if (title.includes(keyword) || content.includes(keyword)) {
+      displayItem._highlight = true; // 标记为高亮
+      matched.push(displayItem);
+    } else {
+      displayItem._highlight = false;
+      others.push(displayItem);
+    }
+  });
+
+  // 拼接：匹配项在前，其他在后
+  const sortedList = [...matched, ...others];
+  
+  // 渲染
+  renderList(sortedList);
+});
+
+
+// --- 模态框按钮事件 ---
+
+// 选项 A: 直接打包下载 ZIP
+document.getElementById('btnZip').addEventListener('click', async () => {
+  modal.style.display = 'none';
+  log('正在打包 ZIP...');
+  
+  const entriesObj = currentWorldbookData.entries;
+  const zip = new JSZip();
+  let count = 0;
+
+  for (const key in entriesObj) {
+    const entry = entriesObj[key];
+    const content = (entry.content ?? '').trim();
+    if (!content) continue;
+
+    const title = entry.comment || entry.title || entry.name || `entry_${key}`;
+    zip.file(sanitizeFilename(title) + '.txt', content);
+    count++;
+  }
+
+  if (count === 0) {
+    alert('没有有效内容可导出');
+    log('无内容');
+    return;
+  }
+
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${currentBookName}.zip`; 
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  
+  log(`已下载 ZIP (${count}条)`);
+});
+
+// 选项 B: 查看条目列表
+document.getElementById('btnList').addEventListener('click', () => {
+  modal.style.display = 'none';
+  log('正在渲染列表...');
+
+  const entriesObj = currentWorldbookData.entries;
+  const listData = [];
+  let idx = 0;
+  
+  for (const key in entriesObj) {
+    const entry = entriesObj[key];
+    const content = (entry.content ?? '').trim();
+    if (!content) continue;
+
+    const title = entry.comment || entry.title || entry.name || `entry_${key}`;
+    
+    listData.push({
+      name: title,
+      content: content,
+      _originalIndex: idx++ // 记录原始顺序
+    });
+  }
+
+  globalItemList = listData; // 保存到全局供搜索使用
+  log(`已列出 Worldbook 条目: ${listData.length}个`);
+  renderList(listData);
+  document.getElementById('searchWrapper').style.display = 'block'; // 显示搜索框
+});
+
+
+// --- 核心渲染函数 ---
+function renderList(items) {
+  const container = document.getElementById('entries');
+  container.innerHTML = '';
+
+  if (items.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">无数据</div>';
+    return;
+  }
+
+  items.forEach(item => {
+    const div = document.createElement('div');
+    // 如果是搜索匹配项，添加 highlight 类
+    div.className = item._highlight ? 'entry highlight' : 'entry';
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'entry-header';
+
+    const title = document.createElement('div');
+    title.className = 'entry-title';
+    title.textContent = item.name || 'Unnamed';
+    
+    // 导出按钮
+    const exportBtn = document.createElement('button');
+    exportBtn.className = 'export-btn';
+    exportBtn.textContent = '导出';
+    exportBtn.addEventListener('click', (e) => {
+      e.stopPropagation(); 
+      exportToTxt(item.name, item.content || '');
+    });
+
+    header.appendChild(title);
+    header.appendChild(exportBtn);
+
+    // Content
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'entry-content';
+    contentDiv.textContent = item.content || '';
+
+    // Click to Expand
+    header.addEventListener('click', () => {
+      div.classList.toggle('expanded');
+    });
+
+    div.appendChild(header);
+    div.appendChild(contentDiv);
+    container.appendChild(div);
+  });
+}
+
+</script>
+</body>
+</html>
